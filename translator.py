@@ -1,7 +1,6 @@
 import re
 import streamlit as st
 
-# 1. 声调映射
 TONES = {
     "1": "²²⁴",
     "2": "³⁴¹",
@@ -13,7 +12,6 @@ TONES = {
     "8": "¹³",
 }
 
-# 2. 声母映射
 INITIALS = [
     ("ny", "ȵ"),
     ("ng", "ŋ"),
@@ -38,7 +36,6 @@ INITIALS = [
     ("r", "ʔ"),
 ]
 
-# 3. 韵母映射
 FINALS = [
     ("uaeq", "uæʔ"),
     ("yueq", "yɛʔ"),
@@ -85,6 +82,31 @@ FINALS = [
     ("n", "n̩"),
 ]
 
+I18N = {
+    "zh": {
+        "page_title": "会昌话拼音转音标工具",
+        "title": "会昌话拼音一键转国际音标",
+        "subtitle": "请输入会昌话罗马字拼音（支持单字、词语、整句及标点符号）：",
+        "input_label": "输入拼音：",
+        "btn_convert": "一键转换",
+        "success": "转换成功！",
+        "result_header": "转换结果（IPA）：",
+        "warning_empty": "请先输入拼音！",
+        "lang_select": "选择语言 / Select Language",
+    },
+    "en": {
+        "page_title": "Huichang Romanization to IPA Converter",
+        "title": "Huichang Romanization to IPA Converter",
+        "subtitle": "Enter Huichang Romanization pinyin (supports words, sentences, and punctuation):",
+        "input_label": "Input Pinyin:",
+        "btn_convert": "Convert to IPA",
+        "success": "Conversion Successful!",
+        "result_header": "Conversion Result (IPA):",
+        "warning_empty": "Please enter pinyin first!",
+        "lang_select": "Select Language / 选择语言",
+    },
+}
+
 
 def convert_syllable(syllable):
     """转换单个音节"""
@@ -95,7 +117,6 @@ def convert_syllable(syllable):
     tone_ipa = TONES.get(tone_num, "")
     core = syllable[:-1]
 
-    # 特殊情况处理：成音节辅音 n（如 n1, n2, n3）
     if core == "n":
         return f"n̩{tone_ipa}"
 
@@ -123,19 +144,16 @@ def convert_syllable(syllable):
 
 def convert_text(text):
     """按句号/问号/感叹号分段，整句包裹在 / ... / 内"""
-    # 根据句末标点（. ? ! 。 ？ ！）及换行符切分成分句
     segments = re.split(r"([.?!。？！\n]+)", text)
 
     result = []
     for segment in segments:
         if not segment:
             continue
-        # 如果是句末标点或换行符，直接保留在外侧
         if re.match(r"^[.?!。？！\n]+$", segment):
             result.append(segment)
             continue
 
-        # 匹配拼音音节与非拼音符号（如逗号、空格）
         tokens = re.findall(r"[a-zA-Z]+\d|[^a-zA-Z\d]+", segment)
         ipa_tokens = []
         for token in tokens:
@@ -150,26 +168,29 @@ def convert_text(text):
 
     return "".join(result)
 
+st.set_page_config(page_title="Huichang IPA Converter", layout="centered")
 
-# ================= Streamlit 界面构建 =================
-st.set_page_config(page_title="会昌话拼音转换工具", layout="centered")
+lang_choice = st.sidebar.selectbox(
+    "Language / 语言", options=["中文", "English"], index=0
+)
 
-st.title("会昌话拼音一键转国际音标")
-st.write("请输入会昌话罗马字拼音（支持单字、词语、整句及标点符号）：")
+lang_code = "zh" if lang_choice == "中文" else "en"
+t = I18N[lang_code]
 
-# 文本输入框
+st.title(t["title"])
+st.write(t["subtitle"])
+
 input_text = st.text_area(
-    "输入拼音：",
-    value="hen1 ho3，nge1 jio2 xio3 kiong2，hen1 jio2 n1 ge3？",
+    t["input_label"],
+    value="hen1 ho3!",
     height=120,
 )
 
-# 转换按钮
-if st.button("一键转换", type="primary"):
+if st.button(t["btn_convert"], type="primary"):
     if input_text.strip():
         output_ipa = convert_text(input_text)
-        st.success("转换成功！")
-        st.subheader("转换结果（IPA）：")
+        st.success(t["success"])
+        st.subheader(t["result_header"])
         st.code(output_ipa, language=None)
     else:
-        st.warning("请先输入拼音！")
+        st.warning(t["warning_empty"])
