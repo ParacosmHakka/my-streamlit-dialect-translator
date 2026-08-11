@@ -172,7 +172,7 @@ def get_ui_text(lang):
             "words": "单字查询",
             "phrases": "词语查询",
             "sents": "句子查询",
-            "search_label": "在这里输入你想查询的汉字、词语或用法（支持模糊搜索）：",
+            "search_label": "在这里输入你想查询的汉字或词语（支持模糊搜索）：",
             "no_data": "没有找到匹配的数据，换个词试试吧！",
             "result_title": "查询结果",
             "mandarin": "对应普通话",
@@ -197,7 +197,7 @@ def get_ui_text(lang):
             "words": "單字查詢",
             "phrases": "詞語查詢",
             "sents": "句子查詢",
-            "search_label": "在此輸入你想要查詢漢字、詞語或是用法（支援模糊搜尋）：",
+            "search_label": "在此輸入你想要查詢漢字或詞語（支持模糊搜尋）：",
             "no_data": "找不到相符資料，試試其他關鍵字！",
             "result_title": "查詢結果",
             "mandarin": "對應普通話",
@@ -337,13 +337,6 @@ if st.session_state["tool_select"] == ui["search_func"]:
                     else:
                         score += 2
                     score += max(0, 10 - len(val))
-
-            if "用法" in filtered_df.columns:
-                val = str(filtered_df.loc[idx, "用法"]) if pd.notna(filtered_df.loc[idx, "用法"]) else ""
-                if search_query in val:
-                    mask.loc[idx] = True
-                    score += 1
-            match_info[idx] = score
 
         filtered_df = filtered_df[mask]
         if not filtered_df.empty:
