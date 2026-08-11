@@ -5,6 +5,9 @@
 
 [我自创的会昌话拼音](https://github.com/ParacosmHakka/-/tree/main/%E8%87%AA%E5%88%9B%E6%8B%BC%E9%9F%B3%E6%96%B9%E6%A1%88)
 
+[会昌话查询网站](https://huichanghua.streamlit.app/)
+（使用streamlit免费搭建，持续更新）
+
 会昌的地理位置：
 
 <img width="330" height="263" alt="image" src="https://github.com/user-attachments/assets/62af1c79-3053-4949-a195-70d0303888eb" />
