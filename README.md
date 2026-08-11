@@ -8,7 +8,7 @@
 [会昌话查询网站](https://huichanghua.streamlit.app/)
 
 
-（使用streamlit免费搭建，持续更新）
+（使用streamlit工具免费搭建，持续更新）
 
 会昌的地理位置：
 
