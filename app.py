@@ -144,7 +144,7 @@ if "language" not in st.session_state:
     st.session_state["language"] = "简体中文"
 
 if "search_modes" not in st.session_state:
-    st.session_state["search_modes"] = ["字词查询", "句子查询"]
+    st.session_state["search_modes"] = ["单字查询", "词语查询", "句子查询"]
 
 if "tool_select" not in st.session_state:
     st.session_state["tool_select"] = "方言词条检索"
@@ -164,14 +164,13 @@ def get_ui_text(lang):
             "lang_sidebar": "Language / 语言",
             "tool_title": "功能选择",
             "search_func": "方言词条检索",
-            "ipa_func": "会昌话拼音‑国际音标转换器",
+            "ipa_func": "拼音‑国际音标转换器",
             "title": "会昌话发音查询系统",
             "sub": "仅供个人使用 | 不定时更新",
             "select_mode": "选择查询内容",
-            "words": "字词查询",
+            "words": "单字查询",
+            "phrases": "词语查询",
             "sents": "句子查询",
-            "filter_type": "按类型筛选",
-            "all": "全部",
             "search_label": "在这里输入你想查询的汉字、词语或用法（支持模糊搜索）：",
             "no_data": "没有找到匹配的数据，换个词试试吧！",
             "result_title": "查询结果",
@@ -180,21 +179,23 @@ def get_ui_text(lang):
             "ipa": "国际音标",
             "pinyin_input": "输入会昌话拼音",
             "convert_btn": "一键转换音标",
-            "out_ipa": "转换结果"
+            "out_ipa": "转换结果",
+            "char_count": "当前收录单字：{} 个",
+            "phrase_count": "当前收录词语：{} 个",
+            "sent_count": "当前收录句子：{} 个"
         }
     elif lang == "繁體中文":
         return {
             "lang_sidebar": "語言 / Language",
             "tool_title": "功能選擇",
             "search_func": "方言詞條檢索",
-            "ipa_func": "會昌話拼音‑國際音標轉換器",
+            "ipa_func": "拼音‑國際音標轉換器",
             "title": "會昌話發音查詢系統",
             "sub": "僅供個人使用｜不定時更新",
             "select_mode": "選擇查詢內容",
-            "words": "字詞查詢",
+            "words": "單字查詢",
+            "phrases": "詞語查詢",
             "sents": "句子查詢",
-            "filter_type": "按類型篩選",
-            "all": "全部",
             "search_label": "在此輸入你想要查詢漢字、詞語或是用法（支援模糊搜尋）：",
             "no_data": "找不到相符資料，試試其他關鍵字！",
             "result_title": "查詢結果",
@@ -203,30 +204,35 @@ def get_ui_text(lang):
             "ipa": "國際音標",
             "pinyin_input": "輸入會昌話拼音",
             "convert_btn": "一鍵轉換音標",
-            "out_ipa": "轉換結果"
+            "out_ipa": "轉換結果",
+            "char_count": "當前收錄單字：{} 個",
+            "phrase_count": "當前收錄詞語：{} 個",
+            "sent_count": "當前收錄句子：{} 個"
         }
     elif lang == "English":
         return {
             "lang_sidebar": "Language",
             "tool_title": "Function",
             "search_func": "Dialect Search",
-            "ipa_func": "HuiChang Pinyin‑IPA Converter",
+            "ipa_func": "Pinyin‑IPA Converter",
             "title": "Huichang Dialect Query System",
             "sub": "Personal Use Only | Update via Excel Anytime",
             "select_mode": "Select Mode",
-            "words": "Word Search",
+            "words": "Character Search",
+            "phrases": "Phrase Search",
             "sents": "Sentence Search",
-            "filter_type": "Filter Type",
-            "all": "All",
             "search_label": "Search Here (Type Chinese character or meaning):",
             "no_data": "No data found.",
             "result_title": "Result",
             "mandarin": "Mandarin",
             "usage": "Usage",
             "ipa": "IPA",
-            "pinyin_input": "Input Huichang Pinyin",
+            "pinyin_input": "Input Huichang Dialect Pinyin",
             "convert_btn": "Convert",
-            "out_ipa": "IPA Output"
+            "out_ipa": "Conversion Successful!",
+            "char_count": "Characters: {}",
+            "phrase_count": "Phrases: {}",
+            "sent_count": "Sentences: {}"
         }
 
 
@@ -242,7 +248,7 @@ st.session_state["tool_select"] = st.sidebar.radio("", [ui["search_func"], ui["i
 
 if st.session_state["tool_select"] == ui["search_func"]:
     st.sidebar.markdown(f"**{ui['select_mode']}**")
-    mode_options = [ui["words"], ui["sents"]]
+    mode_options = [ui["words"], ui["phrases"], ui["sents"]]
     selected_modes = []
     for mode in mode_options:
         checked = st.sidebar.checkbox(mode, value=(mode in st.session_state.get("search_modes", mode_options)),
@@ -255,10 +261,16 @@ if st.session_state["tool_select"] == ui["search_func"]:
         selected_modes = mode_options
 
     is_words_mode = ui["words"] in selected_modes
+    is_phrases_mode = ui["phrases"] in selected_modes
     is_sents_mode = ui["sents"] in selected_modes
+
     combined_dfs = []
     if is_words_mode:
-        combined_dfs.append(df_hc_words)
+        df_words_filtered = df_hc_words[df_hc_words["类型"] == "单字"]
+        combined_dfs.append(df_words_filtered)
+    if is_phrases_mode:
+        df_phrases_filtered = df_hc_words[df_hc_words["类型"] == "词语"]
+        combined_dfs.append(df_phrases_filtered)
     if is_sents_mode:
         combined_dfs.append(df_hc_sents)
 
@@ -266,18 +278,35 @@ if st.session_state["tool_select"] == ui["search_func"]:
     char_col = "会昌话正字"
     pinyin_col = "会昌话拼音"
 
-    if "类型" in current_df.columns:
-        all_types = [ui["all"]] + sorted(list(current_df["类型"].dropna().unique()))
-        type_choice = st.sidebar.selectbox(ui["filter_type"], all_types, key="type_filter")
-    else:
-        type_choice = ui["all"]
-
     st.title(ui["title"])
     st.caption(ui["sub"])
+    
     search_query = st.text_input(ui["search_label"], "").strip()
+    
+    if len(selected_modes) == 1:
+        if ui["words"] in selected_modes:
+            count = len(df_hc_words[df_hc_words["类型"] == "单字"])
+            st.caption(ui["char_count"].format(count))
+        elif ui["phrases"] in selected_modes:
+            count = len(df_hc_words[df_hc_words["类型"] == "词语"])
+            st.caption(ui["phrase_count"].format(count))
+        elif ui["sents"] in selected_modes:
+            count = len(df_hc_sents)
+            st.caption(ui["sent_count"].format(count))
+    else:
+        count_parts = []
+        if ui["words"] in selected_modes:
+            count = len(df_hc_words[df_hc_words["类型"] == "单字"])
+            count_parts.append(ui["char_count"].format(count))
+        if ui["phrases"] in selected_modes:
+            count = len(df_hc_words[df_hc_words["类型"] == "词语"])
+            count_parts.append(ui["phrase_count"].format(count))
+        if ui["sents"] in selected_modes:
+            count = len(df_hc_sents)
+            count_parts.append(ui["sent_count"].format(count))
+        st.caption(" | ".join(count_parts))
+
     filtered_df = current_df.copy()
-    if type_choice != ui["all"] and "类型" in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df["类型"] == type_choice]
 
     if search_query:
         mask = pd.Series(False, index=filtered_df.index)
@@ -329,8 +358,6 @@ if st.session_state["tool_select"] == ui["search_func"]:
             row = row.fillna("")
             word_to_show = row[char_col] if (char_col in row and row[char_col]) else row.get('普通话', '')
             display_title = f"{word_to_show}"
-            if "读法类型" in row and row['读法类型']:
-                display_title += f" ({row['读法类型']})"
             with st.container():
                 col1, col2 = st.columns(2)
                 with col1:
@@ -341,6 +368,8 @@ if st.session_state["tool_select"] == ui["search_func"]:
                     st.markdown(f"**{ui['ipa']}:** `{ipa_val}`")
                 with col2:
                     st.markdown(f"**{ui['mandarin']}:** {row.get('普通话', '')}")
+                    if "读法类型" in row and row["读法类型"]:
+                        st.markdown(f"**读法类型:** {row['读法类型']}")
                     if "用法" in row and row["用法"]:
                         st.markdown(f"💡 **{ui['usage']}:** {row['用法']}")
                 st.divider()
