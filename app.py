@@ -84,6 +84,12 @@ FINALS = [
     ("n", "n̩"),
 ]
 
+INITIAL_PATTERNS = sorted([py for py, _ in INITIALS], key=len, reverse=True)
+FINAL_PATTERNS = sorted([py for py, _ in FINALS], key=len, reverse=True)
+
+TONE_ORDER = ["1", "2", "3", "4", "5", "6", "7", "8"]
+INITIAL_ORDER = [py for py, _ in INITIALS]
+FINAL_ORDER = [py for py, _ in FINALS]
 
 def convert_syllable(syllable):
     tone_match = re.search(r"\d$", syllable)
@@ -139,6 +145,168 @@ def convert_text(text):
             result.append(f"/{seg_ipa}/")
     return "".join(result)
 
+
+def parse_pinyin_query(query):
+    if not query:
+        return "", "", False
+    
+    query_lower = query.lower().strip()
+    has_tone = bool(re.search(r"\d$", query_lower))
+    core = query_lower[:-1] if has_tone else query_lower
+    
+    matched_initial = ""
+    for py in INITIAL_PATTERNS:
+        if core.startswith(py):
+            matched_initial = py
+            break
+    
+    final_part = core[len(matched_initial):]
+    return matched_initial, final_part, has_tone
+
+
+def get_pinyin_score(syllable, query_initial, query_final):
+    """计算拼音匹配分数，分数越低优先级越高"""
+    score = 0
+    tone_match = re.search(r"(\d)$", syllable)
+    core = syllable[:-1] if tone_match else syllable
+    
+    if query_initial:
+        pos = core.find(query_initial)
+        if pos == 0:
+            score += 0
+        elif pos > 0:
+            score += 100 + pos
+        else:
+            score += 1000
+    
+    if query_final:
+        pos = core.find(query_final)
+        if pos == 0:
+            score += 0
+        elif pos > 0:
+            score += 100 + pos
+        else:
+            score += 1000
+    
+    score += len(core) * 10
+    
+    if tone_match:
+        tone_num = tone_match.group(1)
+        score += TONE_ORDER.index(tone_num) * 0.01
+    else:
+        score += 100
+    
+    matched_initial = ""
+    for py in INITIAL_PATTERNS:
+        if core.startswith(py):
+            matched_initial = py
+            break
+    if matched_initial and matched_initial in INITIAL_ORDER:
+        score += INITIAL_ORDER.index(matched_initial) * 0.0001
+    
+    final_part = core[len(matched_initial):]
+    if final_part and final_part in FINAL_ORDER:
+        score += FINAL_ORDER.index(final_part) * 0.00001
+    
+    if tone_match:
+        tone_num = tone_match.group(1)
+        score += TONE_ORDER.index(tone_num) * 0.000001
+    
+    return score
+
+
+def get_entry_type_priority(row):
+    """获取词条类型优先级，数字越小优先级越高"""
+    if "类型" in row:
+        if row["类型"] == "单字":
+            return 0
+        elif row["类型"] == "词语":
+            return 1
+    return 2
+
+
+def filter_by_pinyin(df, query, selected_tones):
+    if df.empty:
+        return df
+    
+    pinyin_col = "会昌话拼音"
+    if pinyin_col not in df.columns:
+        return df
+    
+    initial, final, has_tone = parse_pinyin_query(query)
+    
+    if not query:
+        if selected_tones:
+            tone_pattern = r"(\d)$"
+            def has_selected_tone(pinyin_val):
+                if pd.isna(pinyin_val) or pinyin_val == "":
+                    return False
+                syllables = str(pinyin_val).split()
+                for syl in syllables:
+                    tone_match = re.search(tone_pattern, syl)
+                    if tone_match and tone_match.group(1) in selected_tones:
+                        return True
+                return False
+            
+            mask = df[pinyin_col].astype(str).apply(has_selected_tone)
+            result_df = df[mask].copy()
+            if not result_df.empty:
+                result_df['_type_priority'] = result_df.apply(get_entry_type_priority, axis=1)
+                result_df['_sort_score'] = result_df[pinyin_col].astype(str).apply(
+                    lambda x: min(get_pinyin_score(syl, initial, final) for syl in str(x).split())
+                )
+                result_df = result_df.sort_values(['_type_priority', '_sort_score'], ascending=[True, True])
+                result_df = result_df.drop(['_type_priority', '_sort_score'], axis=1)
+            return result_df
+        return df
+    
+    def match_pinyin(pinyin_val):
+        if pd.isna(pinyin_val) or pinyin_val == "":
+            return False
+        pinyin_str = str(pinyin_val).lower().strip()
+        syllables = pinyin_str.split()
+        
+        for syl in syllables:
+            tone_match = re.search(r"(\d)$", syl)
+            tone = tone_match.group(1) if tone_match else ""
+            
+            if selected_tones and tone not in selected_tones:
+                continue
+            
+            core = syl[:-1] if tone_match else syl
+            
+            initial_match = False
+            final_match = False
+            
+            if initial:
+                initial_match = core.startswith(initial)
+            else:
+                initial_match = True
+            
+            if final:
+                final_match = final in core
+            else:
+                final_match = True
+            
+            if initial_match and final_match:
+                return True
+        
+        return False
+    
+    mask = df[pinyin_col].astype(str).apply(match_pinyin)
+    result_df = df[mask].copy()
+    
+    if not result_df.empty:
+        result_df['_type_priority'] = result_df.apply(get_entry_type_priority, axis=1)
+        result_df['_sort_score'] = result_df[pinyin_col].astype(str).apply(
+            lambda x: min(get_pinyin_score(syl, initial, final) for syl in str(x).split())
+        )
+        result_df = result_df.sort_values(['_type_priority', '_sort_score'], ascending=[True, True])
+        result_df = result_df.drop(['_type_priority', '_sort_score'], axis=1)
+    
+    return result_df
+
+
 st.set_page_config(page_title="会昌话发音查询网", layout="wide")
 
 if "language" not in st.session_state:
@@ -149,6 +317,9 @@ if "search_modes" not in st.session_state:
 
 if "tool_select" not in st.session_state:
     st.session_state["tool_select"] = "方言词条检索"
+
+if "search_type" not in st.session_state:
+    st.session_state["search_type"] = "汉字查询"
 
 try:
     excel_file = "dialect_data.xlsx"
@@ -173,6 +344,7 @@ def get_ui_text(lang):
             "phrases": "词语查询",
             "sents": "句子查询",
             "search_label": "在这里输入你想查询的汉字或词语（支持模糊搜索）：",
+            "pinyin_search_label": "在这里输入会昌话拼音（支持声母/韵母/完整音节）：",
             "no_data": "没有找到匹配的数据，换个词试试吧！",
             "result_title": "查询结果",
             "mandarin": "对应普通话",
@@ -183,7 +355,12 @@ def get_ui_text(lang):
             "out_ipa": "转换结果",
             "char_count": "当前收录单字：{} 个",
             "phrase_count": "当前收录词语：{} 个",
-            "sent_count": "当前收录句子：{} 个"
+            "sent_count": "当前收录句子：{} 个",
+            "search_type_label": "查询方式",
+            "hanzi_search": "汉字查询",
+            "pinyin_search": "拼音查询",
+            "tone_filter_label": "声调过滤（可多选）",
+            "tone_all": "全部声调"
         }
     elif lang == "繁體中文":
         return {
@@ -198,6 +375,7 @@ def get_ui_text(lang):
             "phrases": "詞語查詢",
             "sents": "句子查詢",
             "search_label": "在此輸入你想要查詢漢字或詞語（支持模糊搜尋）：",
+            "pinyin_search_label": "在此輸入會昌話拼音（支持聲母/韻母/完整音節）：",
             "no_data": "找不到相符資料，試試其他關鍵字！",
             "result_title": "查詢結果",
             "mandarin": "對應普通話",
@@ -208,7 +386,12 @@ def get_ui_text(lang):
             "out_ipa": "轉換結果",
             "char_count": "當前收錄單字：{} 個",
             "phrase_count": "當前收錄詞語：{} 個",
-            "sent_count": "當前收錄句子：{} 個"
+            "sent_count": "當前收錄句子：{} 個",
+            "search_type_label": "查詢方式",
+            "hanzi_search": "漢字查詢",
+            "pinyin_search": "拼音查詢",
+            "tone_filter_label": "聲調過濾（可多選）",
+            "tone_all": "全部聲調"
         }
     elif lang == "English":
         return {
@@ -223,6 +406,7 @@ def get_ui_text(lang):
             "phrases": "Phrase Search",
             "sents": "Sentence Search",
             "search_label": "Search Here (Type Chinese character or meaning):",
+            "pinyin_search_label": "Enter Huichang Pinyin (supports initial/final/syllable):",
             "no_data": "No data found.",
             "result_title": "Result",
             "mandarin": "Mandarin",
@@ -233,7 +417,12 @@ def get_ui_text(lang):
             "out_ipa": "Conversion Successful!",
             "char_count": "Characters: {}",
             "phrase_count": "Phrases: {}",
-            "sent_count": "Sentences: {}"
+            "sent_count": "Sentences: {}",
+            "search_type_label": "Search Type",
+            "hanzi_search": "Character Search",
+            "pinyin_search": "Pinyin Search",
+            "tone_filter_label": "Tone Filter (multi-select)",
+            "tone_all": "All Tones"
         }
 
 
@@ -282,7 +471,51 @@ if st.session_state["tool_select"] == ui["search_func"]:
     st.title(ui["title"])
     st.caption(ui["sub"])
     
-    search_query = st.text_input(ui["search_label"], "").strip()
+    col_search_input, col_search_type = st.columns([5, 1])
+    
+    with col_search_input:
+        if st.session_state.get("search_type", "汉字查询") == ui["hanzi_search"]:
+            search_query = st.text_input(ui["search_label"], "", label_visibility="visible", key="search_input")
+        else:
+            search_query = st.text_input(ui["pinyin_search_label"], "", label_visibility="visible", key="search_input")
+    
+    with col_search_type:
+        st.write("")
+        search_type = st.radio(
+            ui["search_type_label"],
+            [ui["hanzi_search"], ui["pinyin_search"]],
+            key="search_type_radio",
+            label_visibility="collapsed",
+            horizontal=False
+        )
+        st.session_state["search_type"] = search_type
+    
+    if search_type == ui["pinyin_search"]:
+        st.sidebar.markdown(f"**{ui['tone_filter_label']}**")
+        tone_options = ["1", "2", "3", "4", "5", "6", "7", "8"]
+        tone_display = {
+            "1": f"1 {TONES['1']}",
+            "2": f"2 {TONES['2']}",
+            "3": f"3 {TONES['3']}",
+            "4": f"4 {TONES['4']}",
+            "5": f"5 {TONES['5']}",
+            "6": f"6 {TONES['6']}",
+            "7": f"7 {TONES['7']}",
+            "8": f"8 {TONES['8']}"
+        }
+        selected_tones = []
+        for t in tone_options:
+            checked = st.sidebar.checkbox(
+                tone_display[t],
+                value=(t in st.session_state.get("selected_tones", [])),
+                key=f"tone_{t}"
+            )
+            if checked:
+                selected_tones.append(t)
+        st.session_state["selected_tones"] = selected_tones
+    else:
+        selected_tones = []
+        st.session_state["selected_tones"] = []
     
     if len(selected_modes) == 1:
         if ui["words"] in selected_modes:
@@ -309,40 +542,46 @@ if st.session_state["tool_select"] == ui["search_func"]:
 
     filtered_df = current_df.copy()
 
-    if search_query:
-        mask = pd.Series(False, index=filtered_df.index)
-        match_info = {}
-        for idx in filtered_df.index:
-            score = 0
-            if "普通话" in filtered_df.columns:
-                val = str(filtered_df.loc[idx, "普通话"]) if pd.notna(filtered_df.loc[idx, "普通话"]) else ""
-                if search_query in val:
-                    mask.loc[idx] = True
-                    if val == search_query:
-                        score += 10
-                    elif val.startswith(search_query):
-                        score += 5
-                    else:
-                        score += 2
-                    score += max(0, 10 - len(val))
+    if search_type == ui["hanzi_search"]:
+        if search_query:
+            mask = pd.Series(False, index=filtered_df.index)
+            match_info = {}
+            for idx in filtered_df.index:
+                score = 0
+                if "普通话" in filtered_df.columns:
+                    val = str(filtered_df.loc[idx, "普通话"]) if pd.notna(filtered_df.loc[idx, "普通话"]) else ""
+                    if search_query in val:
+                        mask.loc[idx] = True
+                        if val == search_query:
+                            score += 10
+                        elif val.startswith(search_query):
+                            score += 5
+                        else:
+                            score += 2
+                        score += max(0, 10 - len(val))
 
-            if char_col in filtered_df.columns:
-                val = str(filtered_df.loc[idx, char_col]) if pd.notna(filtered_df.loc[idx, char_col]) else ""
-                if search_query in val:
-                    mask.loc[idx] = True
-                    if val == search_query:
-                        score += 10
-                    elif val.startswith(search_query):
-                        score += 5
-                    else:
-                        score += 2
-                    score += max(0, 10 - len(val))
+                if char_col in filtered_df.columns:
+                    val = str(filtered_df.loc[idx, char_col]) if pd.notna(filtered_df.loc[idx, char_col]) else ""
+                    if search_query in val:
+                        mask.loc[idx] = True
+                        if val == search_query:
+                            score += 10
+                        elif val.startswith(search_query):
+                            score += 5
+                        else:
+                            score += 2
+                        score += max(0, 10 - len(val))
 
-        filtered_df = filtered_df[mask]
-        if not filtered_df.empty:
-            filtered_df['_match_score'] = filtered_df.index.map(lambda x: match_info.get(x, 0))
-            filtered_df = filtered_df.sort_values('_match_score', ascending=False)
-            filtered_df = filtered_df.drop('_match_score', axis=1)
+                match_info[idx] = score
+
+            filtered_df = filtered_df[mask]
+            if not filtered_df.empty:
+                filtered_df['_type_priority'] = filtered_df.apply(get_entry_type_priority, axis=1)
+                filtered_df['_match_score'] = filtered_df.index.map(lambda x: match_info.get(x, 0))
+                filtered_df = filtered_df.sort_values(['_type_priority', '_match_score'], ascending=[True, False])
+                filtered_df = filtered_df.drop(['_type_priority', '_match_score'], axis=1)
+    else:
+        filtered_df = filter_by_pinyin(filtered_df, search_query, selected_tones)
 
     st.subheader(ui["result_title"])
     if filtered_df.empty:
