@@ -319,6 +319,15 @@ if "tool_select" not in st.session_state:
 if "search_type" not in st.session_state:
     st.session_state["search_type"] = "汉字查询"
 
+if "selected_tones" not in st.session_state:
+    st.session_state["selected_tones"] = []
+
+if "search_query" not in st.session_state:
+    st.session_state["search_query"] = ""
+
+if "ipa_input" not in st.session_state:
+    st.session_state["ipa_input"] = "hen1 ho3，nge1 jio2 xio3 kiong2"
+
 try:
     excel_file = "dialect_data.xlsx"
     df_hc_words = pd.read_excel(excel_file, sheet_name="会昌话字词查询")
@@ -353,13 +362,16 @@ def get_ui_text(lang):
             "convert_btn": "一键转换音标",
             "out_ipa": "转换结果",
             "char_count": "当前收录单字：{} 个",
-            "phrase_count": "当前收录词语：{} 个",
+            "phrases_count": "当前收录词语：{} 个",
             "sent_count": "当前收录句子：{} 个",
             "search_type_label": "查询方式",
             "hanzi_search": "汉字查询",
             "pinyin_search": "拼音查询",
             "tone_filter_label": "声调过滤（可多选）",
-            "tone_all": "全部声调"
+            "tone_all": "全部声调",
+            "warning_select_mode": "请至少选择一种查询模式",
+            "pinyin_col": "会昌话拼音",
+            "ipa_col": "国际音标"
         }
     elif lang == "繁體中文":
         return {
@@ -385,13 +397,16 @@ def get_ui_text(lang):
             "convert_btn": "一鍵轉換音標",
             "out_ipa": "轉換結果",
             "char_count": "當前收錄單字：{} 個",
-            "phrase_count": "當前收錄詞語：{} 個",
+            "phrases_count": "當前收錄詞語：{} 個",
             "sent_count": "當前收錄句子：{} 個",
             "search_type_label": "查詢方式",
             "hanzi_search": "漢字查詢",
             "pinyin_search": "拼音查詢",
             "tone_filter_label": "聲調過濾（可多選）",
-            "tone_all": "全部聲調"
+            "tone_all": "全部聲調",
+            "warning_select_mode": "請至少選擇一種查詢模式",
+            "pinyin_col": "會昌話拼音",
+            "ipa_col": "國際音標"
         }
     elif lang == "English":
         return {
@@ -417,38 +432,63 @@ def get_ui_text(lang):
             "convert_btn": "Convert",
             "out_ipa": "Conversion Successful!",
             "char_count": "Characters: {}",
-            "phrase_count": "Phrases: {}",
+            "phrases_count": "Phrases: {}",
             "sent_count": "Sentences: {}",
             "search_type_label": "Search Type",
             "hanzi_search": "Character Search",
             "pinyin_search": "Pinyin Search",
             "tone_filter_label": "Tone Filter (multi-select)",
-            "tone_all": "All Tones"
+            "tone_all": "All Tones",
+            "warning_select_mode": "Please select at least one search mode",
+            "pinyin_col": "Huichang Pinyin",
+            "ipa_col": "IPA"
         }
 
-
-st.session_state["language"] = st.sidebar.radio(
+lang = st.sidebar.radio(
     label=get_ui_text(st.session_state["language"])["lang_sidebar"],
     options=["简体中文", "繁體中文", "English"],
-    key="lang_select"
+    key="lang_select",
+    on_change=lambda: None
 )
+
+st.session_state["language"] = lang
 ui = get_ui_text(st.session_state["language"])
 
 st.sidebar.header(ui["tool_title"])
-st.session_state["tool_select"] = st.sidebar.radio("", [ui["search_func"], ui["ipa_func"]], key="tool_radio")
+
+tool_options = [ui["search_func"], ui["ipa_func"]]
+current_tool = st.session_state.get("tool_select", ui["search_func"])
+
+if current_tool not in tool_options:
+    current_tool = ui["search_func"]
+    st.session_state["tool_select"] = current_tool
+
+selected_tool = st.sidebar.radio("", tool_options, index=tool_options.index(current_tool), key="tool_radio")
+st.session_state["tool_select"] = selected_tool
 
 if st.session_state["tool_select"] == ui["search_func"]:
     st.sidebar.markdown(f"**{ui['select_mode']}**")
     mode_options = [ui["words"], ui["phrases"], ui["sents"]]
+
+    current_modes = st.session_state.get("search_modes", mode_options.copy())
+    current_modes = [m for m in current_modes if m in mode_options]
+    if not current_modes:
+        current_modes = mode_options.copy()
+    
     selected_modes = []
     for mode in mode_options:
-        checked = st.sidebar.checkbox(mode, value=(mode in st.session_state.get("search_modes", mode_options)),
-                                        key=f"mode_{mode}")
+        checked = st.sidebar.checkbox(
+            mode, 
+            value=(mode in current_modes),
+            key=f"mode_{mode}"
+        )
         if checked:
             selected_modes.append(mode)
+
     st.session_state["search_modes"] = selected_modes
+    
     if not selected_modes:
-        st.sidebar.warning("请至少选择一种查询模式")
+        st.sidebar.warning(ui["warning_select_mode"])
         selected_modes = mode_options
 
     is_words_mode = ui["words"] in selected_modes
@@ -476,15 +516,32 @@ if st.session_state["tool_select"] == ui["search_func"]:
     
     with col_search_input:
         if st.session_state.get("search_type", "汉字查询") == ui["hanzi_search"]:
-            search_query = st.text_input(ui["search_label"], "", label_visibility="visible", key="search_input")
+            search_query = st.text_input(
+                ui["search_label"], 
+                value=st.session_state.get("search_query", ""),
+                label_visibility="visible", 
+                key="search_input"
+            )
         else:
-            search_query = st.text_input(ui["pinyin_search_label"], "", label_visibility="visible", key="search_input")
+            search_query = st.text_input(
+                ui["pinyin_search_label"], 
+                value=st.session_state.get("search_query", ""),
+                label_visibility="visible", 
+                key="search_input"
+            )
+        st.session_state["search_query"] = search_query
     
     with col_search_type:
         st.write("")
+
+        current_search_type = st.session_state.get("search_type", ui["hanzi_search"])
+        if current_search_type not in [ui["hanzi_search"], ui["pinyin_search"]]:
+            current_search_type = ui["hanzi_search"]
+        
         search_type = st.radio(
             ui["search_type_label"],
             [ui["hanzi_search"], ui["pinyin_search"]],
+            index=0 if current_search_type == ui["hanzi_search"] else 1,
             key="search_type_radio",
             label_visibility="collapsed",
             horizontal=False
@@ -515,7 +572,6 @@ if st.session_state["tool_select"] == ui["search_func"]:
                 selected_tones.append(t)
         st.session_state["selected_tones"] = selected_tones
     else:
-        selected_tones = []
         st.session_state["selected_tones"] = []
     
     if len(selected_modes) == 1:
@@ -524,7 +580,7 @@ if st.session_state["tool_select"] == ui["search_func"]:
             st.caption(ui["char_count"].format(count))
         elif ui["phrases"] in selected_modes:
             count = len(df_hc_words[df_hc_words["类型"] == "词语"])
-            st.caption(ui["phrase_count"].format(count))
+            st.caption(ui["phrases_count"].format(count))
         elif ui["sents"] in selected_modes:
             count = len(df_hc_sents)
             st.caption(ui["sent_count"].format(count))
@@ -535,7 +591,7 @@ if st.session_state["tool_select"] == ui["search_func"]:
             count_parts.append(ui["char_count"].format(count))
         if ui["phrases"] in selected_modes:
             count = len(df_hc_words[df_hc_words["类型"] == "词语"])
-            count_parts.append(ui["phrase_count"].format(count))
+            count_parts.append(ui["phrases_count"].format(count))
         if ui["sents"] in selected_modes:
             count = len(df_hc_sents)
             count_parts.append(ui["sent_count"].format(count))
@@ -582,7 +638,7 @@ if st.session_state["tool_select"] == ui["search_func"]:
                 filtered_df = filtered_df.sort_values(['_type_priority', '_match_score'], ascending=[True, False])
                 filtered_df = filtered_df.drop(['_type_priority', '_match_score'], axis=1)
     else:
-        filtered_df = filter_by_pinyin(filtered_df, search_query, selected_tones)
+        filtered_df = filter_by_pinyin(filtered_df, search_query, st.session_state.get("selected_tones", []))
 
     st.subheader(ui["result_title"])
     
@@ -601,8 +657,9 @@ if st.session_state["tool_select"] == ui["search_func"]:
                     st.markdown(f"### **{display_title}**")
                     pinyin_val = row.get(pinyin_col, '')
                     ipa_val = convert_text(pinyin_val)
-                    st.markdown(f"**会昌话拼音:** `{pinyin_val}`")
-                    st.markdown(f"**{ui['ipa']}:** `{ipa_val}`")
+
+                    st.markdown(f"**{ui['pinyin_col']}:** `{pinyin_val}`")
+                    st.markdown(f"**{ui['ipa_col']}:** `{ipa_val}`")
                 with col2:
                     st.markdown(f"**{ui['mandarin']}:** {row.get('普通话', '')}")
                     if "读法类型" in row and row["读法类型"]:
@@ -613,10 +670,18 @@ if st.session_state["tool_select"] == ui["search_func"]:
 
 elif st.session_state["tool_select"] == ui["ipa_func"]:
     st.title(ui["ipa_func"])
-    input_py = st.text_area(ui["pinyin_input"], value="hen1 ho3，nge1 jio2 xio3 kiong2", height=140)
+
+    ipa_input = st.text_area(
+        ui["pinyin_input"], 
+        value=st.session_state.get("ipa_input", "hen1 ho3，nge1 jio2 xio3 kiong2"),
+        height=140,
+        key="ipa_textarea"
+    )
+    st.session_state["ipa_input"] = ipa_input
+    
     if st.button(ui["convert_btn"], type="primary"):
-        if input_py.strip():
-            res = convert_text(input_py)
+        if ipa_input.strip():
+            res = convert_text(ipa_input)
             st.success(ui["out_ipa"])
             st.code(res)
         else:
