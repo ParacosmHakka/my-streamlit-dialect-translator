@@ -165,7 +165,6 @@ def parse_pinyin_query(query):
 
 
 def get_pinyin_score(syllable, query_initial, query_final):
-    """计算拼音匹配分数，分数越低优先级越高"""
     score = 0
     tone_match = re.search(r"(\d)$", syllable)
     core = syllable[:-1] if tone_match else syllable
@@ -216,7 +215,6 @@ def get_pinyin_score(syllable, query_initial, query_final):
 
 
 def get_entry_type_priority(row):
-    """获取词条类型优先级，数字越小优先级越高"""
     if "类型" in row:
         if row["类型"] == "单字":
             return 0
@@ -347,6 +345,7 @@ def get_ui_text(lang):
             "pinyin_search_label": "在这里输入会昌话拼音（支持声母/韵母/完整音节）：",
             "no_data": "没有找到匹配的数据，换个词试试吧！",
             "result_title": "查询结果",
+            "entry_count": "条目数量：{}",
             "mandarin": "对应普通话",
             "usage": "用法示例",
             "ipa": "国际音标",
@@ -378,6 +377,7 @@ def get_ui_text(lang):
             "pinyin_search_label": "在此輸入會昌話拼音（支持聲母/韻母/完整音節）：",
             "no_data": "找不到相符資料，試試其他關鍵字！",
             "result_title": "查詢結果",
+            "entry_count": "條目數量：{}",
             "mandarin": "對應普通話",
             "usage": "用法示例",
             "ipa": "國際音標",
@@ -409,6 +409,7 @@ def get_ui_text(lang):
             "pinyin_search_label": "Enter Huichang Pinyin (supports initial/final/syllable):",
             "no_data": "No data found.",
             "result_title": "Result",
+            "entry_count": "Entries: {}",
             "mandarin": "Mandarin",
             "usage": "Usage",
             "ipa": "IPA",
@@ -584,9 +585,12 @@ if st.session_state["tool_select"] == ui["search_func"]:
         filtered_df = filter_by_pinyin(filtered_df, search_query, selected_tones)
 
     st.subheader(ui["result_title"])
+    
     if filtered_df.empty:
+        st.caption(ui["entry_count"].format(0))
         st.info(ui["no_data"])
     else:
+        st.caption(ui["entry_count"].format(len(filtered_df)))
         for _, row in filtered_df.iterrows():
             row = row.fillna("")
             word_to_show = row[char_col] if (char_col in row and row[char_col]) else row.get('普通话', '')
