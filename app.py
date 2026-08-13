@@ -330,8 +330,13 @@ if "ipa_input" not in st.session_state:
 
 try:
     excel_file = "dialect_data.xlsx"
-    df_hc_words = pd.read_excel(excel_file, sheet_name="会昌话字词查询")
+    df_hc_chars = pd.read_excel(excel_file, sheet_name="会昌话单字查询")
+    df_hc_words = pd.read_excel(excel_file, sheet_name="会昌话词语查询")
     df_hc_sents = pd.read_excel(excel_file, sheet_name="会昌话句子查询")
+    
+    df_hc_chars["类型"] = "单字"
+    df_hc_words["类型"] = "词语"
+    df_hc_sents["类型"] = "句子"
 except Exception as e:
     st.error(f"读取文件失败，请检查文件和工作表名称：{e}")
     st.stop()
@@ -362,7 +367,7 @@ def get_ui_text(lang):
             "convert_btn": "一键转换音标",
             "out_ipa": "转换结果",
             "char_count": "当前收录单字：{} 个",
-            "phrases_count": "当前收录词语：{} 个",
+            "phrase_count": "当前收录词语：{} 个",
             "sent_count": "当前收录句子：{} 个",
             "search_type_label": "查询方式",
             "hanzi_search": "汉字查询",
@@ -397,7 +402,7 @@ def get_ui_text(lang):
             "convert_btn": "一鍵轉換音標",
             "out_ipa": "轉換結果",
             "char_count": "當前收錄單字：{} 個",
-            "phrases_count": "當前收錄詞語：{} 個",
+            "phrase_count": "當前收錄詞語：{} 個",
             "sent_count": "當前收錄句子：{} 個",
             "search_type_label": "查詢方式",
             "hanzi_search": "漢字查詢",
@@ -432,7 +437,7 @@ def get_ui_text(lang):
             "convert_btn": "Convert",
             "out_ipa": "Conversion Successful!",
             "char_count": "Characters: {}",
-            "phrases_count": "Phrases: {}",
+            "phrase_count": "Phrases: {}",
             "sent_count": "Sentences: {}",
             "search_type_label": "Search Type",
             "hanzi_search": "Character Search",
@@ -444,21 +449,19 @@ def get_ui_text(lang):
             "ipa_col": "IPA"
         }
 
+
 lang = st.sidebar.radio(
     label=get_ui_text(st.session_state["language"])["lang_sidebar"],
     options=["简体中文", "繁體中文", "English"],
     key="lang_select",
     on_change=lambda: None
 )
-
 st.session_state["language"] = lang
 ui = get_ui_text(st.session_state["language"])
 
 st.sidebar.header(ui["tool_title"])
-
 tool_options = [ui["search_func"], ui["ipa_func"]]
 current_tool = st.session_state.get("tool_select", ui["search_func"])
-
 if current_tool not in tool_options:
     current_tool = ui["search_func"]
     st.session_state["tool_select"] = current_tool
@@ -469,7 +472,7 @@ st.session_state["tool_select"] = selected_tool
 if st.session_state["tool_select"] == ui["search_func"]:
     st.sidebar.markdown(f"**{ui['select_mode']}**")
     mode_options = [ui["words"], ui["phrases"], ui["sents"]]
-
+    
     current_modes = st.session_state.get("search_modes", mode_options.copy())
     current_modes = [m for m in current_modes if m in mode_options]
     if not current_modes:
@@ -484,7 +487,7 @@ if st.session_state["tool_select"] == ui["search_func"]:
         )
         if checked:
             selected_modes.append(mode)
-
+    
     st.session_state["search_modes"] = selected_modes
     
     if not selected_modes:
@@ -497,11 +500,9 @@ if st.session_state["tool_select"] == ui["search_func"]:
 
     combined_dfs = []
     if is_words_mode:
-        df_words_filtered = df_hc_words[df_hc_words["类型"] == "单字"]
-        combined_dfs.append(df_words_filtered)
+        combined_dfs.append(df_hc_chars)
     if is_phrases_mode:
-        df_phrases_filtered = df_hc_words[df_hc_words["类型"] == "词语"]
-        combined_dfs.append(df_phrases_filtered)
+        combined_dfs.append(df_hc_words)
     if is_sents_mode:
         combined_dfs.append(df_hc_sents)
 
@@ -533,7 +534,6 @@ if st.session_state["tool_select"] == ui["search_func"]:
     
     with col_search_type:
         st.write("")
-
         current_search_type = st.session_state.get("search_type", ui["hanzi_search"])
         if current_search_type not in [ui["hanzi_search"], ui["pinyin_search"]]:
             current_search_type = ui["hanzi_search"]
@@ -576,22 +576,22 @@ if st.session_state["tool_select"] == ui["search_func"]:
     
     if len(selected_modes) == 1:
         if ui["words"] in selected_modes:
-            count = len(df_hc_words[df_hc_words["类型"] == "单字"])
+            count = len(df_hc_chars)
             st.caption(ui["char_count"].format(count))
         elif ui["phrases"] in selected_modes:
-            count = len(df_hc_words[df_hc_words["类型"] == "词语"])
-            st.caption(ui["phrases_count"].format(count))
+            count = len(df_hc_words)
+            st.caption(ui["phrase_count"].format(count))
         elif ui["sents"] in selected_modes:
             count = len(df_hc_sents)
             st.caption(ui["sent_count"].format(count))
     else:
         count_parts = []
         if ui["words"] in selected_modes:
-            count = len(df_hc_words[df_hc_words["类型"] == "单字"])
+            count = len(df_hc_chars)
             count_parts.append(ui["char_count"].format(count))
         if ui["phrases"] in selected_modes:
-            count = len(df_hc_words[df_hc_words["类型"] == "词语"])
-            count_parts.append(ui["phrases_count"].format(count))
+            count = len(df_hc_words)
+            count_parts.append(ui["phrase_count"].format(count))
         if ui["sents"] in selected_modes:
             count = len(df_hc_sents)
             count_parts.append(ui["sent_count"].format(count))
@@ -657,7 +657,6 @@ if st.session_state["tool_select"] == ui["search_func"]:
                     st.markdown(f"### **{display_title}**")
                     pinyin_val = row.get(pinyin_col, '')
                     ipa_val = convert_text(pinyin_val)
-
                     st.markdown(f"**{ui['pinyin_col']}:** `{pinyin_val}`")
                     st.markdown(f"**{ui['ipa_col']}:** `{ipa_val}`")
                 with col2:
@@ -670,7 +669,6 @@ if st.session_state["tool_select"] == ui["search_func"]:
 
 elif st.session_state["tool_select"] == ui["ipa_func"]:
     st.title(ui["ipa_func"])
-
     ipa_input = st.text_area(
         ui["pinyin_input"], 
         value=st.session_state.get("ipa_input", "hen1 ho3，nge1 jio2 xio3 kiong2"),
