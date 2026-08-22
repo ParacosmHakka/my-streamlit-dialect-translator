@@ -305,6 +305,44 @@ def filter_by_pinyin(df, query, selected_tones):
     return result_df
 
 
+def group_by_character(df):
+    if df.empty:
+        return df
+    
+    char_col = "会昌话正字"
+    if char_col not in df.columns:
+        return df
+    
+    grouped = []
+    for char, group in df.groupby(char_col):
+        if len(group) > 1:
+            readings = []
+            for _, row in group.iterrows():
+                pinyin = row.get("会昌话拼音", "")
+                ipa = convert_text(pinyin)
+                reading_type = row.get("读法类型", "")
+                if pd.isna(reading_type):
+                    reading_type = ""
+                readings.append({
+                    "pinyin": pinyin,
+                    "ipa": ipa,
+                    "type": str(reading_type)
+                })
+            
+            merged_row = group.iloc[0].to_dict()
+            merged_row["_readings"] = readings
+            merged_row["_is_grouped"] = True
+            grouped.append(merged_row)
+        else:
+            row = group.iloc[0].to_dict()
+            pinyin = row.get("会昌话拼音", "")
+            row["_ipa"] = convert_text(pinyin)
+            row["_is_grouped"] = False
+            grouped.append(row)
+    
+    return pd.DataFrame(grouped)
+
+
 st.set_page_config(page_title="会昌话发音查询网", layout="wide")
 
 if "language" not in st.session_state:
@@ -376,7 +414,10 @@ def get_ui_text(lang):
             "tone_all": "全部声调",
             "warning_select_mode": "请至少选择一种查询模式",
             "pinyin_col": "会昌话拼音",
-            "ipa_col": "国际音标"
+            "ipa_col": "国际音标",
+            "new_school": "新派",
+            "old_school": "老派",
+            "reading_type": "读法类型"
         }
     elif lang == "繁體中文":
         return {
@@ -411,7 +452,10 @@ def get_ui_text(lang):
             "tone_all": "全部聲調",
             "warning_select_mode": "請至少選擇一種查詢模式",
             "pinyin_col": "會昌話拼音",
-            "ipa_col": "國際音標"
+            "ipa_col": "國際音標",
+            "new_school": "新派",
+            "old_school": "老派",
+            "reading_type": "讀法類型"
         }
     elif lang == "English":
         return {
@@ -446,7 +490,10 @@ def get_ui_text(lang):
             "tone_all": "All Tones",
             "warning_select_mode": "Please select at least one search mode",
             "pinyin_col": "Huichang Pinyin",
-            "ipa_col": "IPA"
+            "ipa_col": "IPA",
+            "new_school": "New School",
+            "old_school": "Old School",
+            "reading_type": "Reading Type"
         }
 
 
@@ -574,27 +621,24 @@ if st.session_state["tool_select"] == ui["search_func"]:
     else:
         st.session_state["selected_tones"] = []
     
+    unique_chars = len(df_hc_chars[char_col].unique()) if is_words_mode else 0
+    unique_words = len(df_hc_words[char_col].unique()) if is_phrases_mode else 0
+    
     if len(selected_modes) == 1:
         if ui["words"] in selected_modes:
-            count = len(df_hc_chars)
-            st.caption(ui["char_count"].format(count))
+            st.caption(ui["char_count"].format(unique_chars))
         elif ui["phrases"] in selected_modes:
-            count = len(df_hc_words)
-            st.caption(ui["phrase_count"].format(count))
+            st.caption(ui["phrase_count"].format(unique_words))
         elif ui["sents"] in selected_modes:
-            count = len(df_hc_sents)
-            st.caption(ui["sent_count"].format(count))
+            st.caption(ui["sent_count"].format(len(df_hc_sents)))
     else:
         count_parts = []
         if ui["words"] in selected_modes:
-            count = len(df_hc_chars)
-            count_parts.append(ui["char_count"].format(count))
+            count_parts.append(ui["char_count"].format(unique_chars))
         if ui["phrases"] in selected_modes:
-            count = len(df_hc_words)
-            count_parts.append(ui["phrase_count"].format(count))
+            count_parts.append(ui["phrase_count"].format(unique_words))
         if ui["sents"] in selected_modes:
-            count = len(df_hc_sents)
-            count_parts.append(ui["sent_count"].format(count))
+            count_parts.append(ui["sent_count"].format(len(df_hc_sents)))
         st.caption(" | ".join(count_parts))
 
     filtered_df = current_df.copy()
@@ -640,14 +684,16 @@ if st.session_state["tool_select"] == ui["search_func"]:
     else:
         filtered_df = filter_by_pinyin(filtered_df, search_query, st.session_state.get("selected_tones", []))
 
+    grouped_df = group_by_character(filtered_df)
+
     st.subheader(ui["result_title"])
     
-    if filtered_df.empty:
+    if grouped_df.empty:
         st.caption(ui["entry_count"].format(0))
         st.info(ui["no_data"])
     else:
-        st.caption(ui["entry_count"].format(len(filtered_df)))
-        for _, row in filtered_df.iterrows():
+        st.caption(ui["entry_count"].format(len(grouped_df)))
+        for _, row in grouped_df.iterrows():
             row = row.fillna("")
             word_to_show = row[char_col] if (char_col in row and row[char_col]) else row.get('普通话', '')
             display_title = f"{word_to_show}"
@@ -655,14 +701,31 @@ if st.session_state["tool_select"] == ui["search_func"]:
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown(f"### **{display_title}**")
-                    pinyin_val = row.get(pinyin_col, '')
-                    ipa_val = convert_text(pinyin_val)
-                    st.markdown(f"**{ui['pinyin_col']}:** `{pinyin_val}`")
-                    st.markdown(f"**{ui['ipa_col']}:** `{ipa_val}`")
+                    if row.get("_is_grouped", False):
+                        readings = row.get("_readings", [])
+                        for idx, r in enumerate(readings):
+                            reading_type = str(r.get("type", ""))
+                            if "新派" in reading_type:
+                                display_type = ui["new_school"]
+                            elif "老派" in reading_type:
+                                display_type = ui["old_school"]
+                            else:
+                                display_type = reading_type if reading_type else ""
+                            if display_type:
+                                st.markdown(f"**{display_type}**")
+                            st.markdown(f"**{ui['pinyin_col']}:** `{r['pinyin']}`")
+                            st.markdown(f"**{ui['ipa_col']}:** `{r['ipa']}`")
+                            if idx < len(readings) - 1:
+                                st.markdown("---")
+                    else:
+                        pinyin_val = row.get(pinyin_col, '')
+                        ipa_val = row.get("_ipa", convert_text(pinyin_val))
+                        st.markdown(f"**{ui['pinyin_col']}:** `{pinyin_val}`")
+                        st.markdown(f"**{ui['ipa_col']}:** `{ipa_val}`")
                 with col2:
                     st.markdown(f"**{ui['mandarin']}:** {row.get('普通话', '')}")
-                    if "读法类型" in row and row["读法类型"]:
-                        st.markdown(f"**读法类型:** {row['读法类型']}")
+                    if "读法类型" in row and row["读法类型"] and not row.get("_is_grouped", False):
+                        st.markdown(f"**{ui['reading_type']}:** {row['读法类型']}")
                     if "用法" in row and row["用法"]:
                         st.markdown(f"💡 **{ui['usage']}:** {row['用法']}")
                 st.divider()
