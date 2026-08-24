@@ -436,6 +436,12 @@ if "search_query" not in st.session_state:
 if "ipa_input" not in st.session_state:
     st.session_state["ipa_input"] = "hen1 ho3，nge1 jio2 xio3 kiong2"
 
+if "show_old_reading" not in st.session_state:
+    st.session_state["show_old_reading"] = True
+
+if "show_new_reading" not in st.session_state:
+    st.session_state["show_new_reading"] = True
+
 try:
     excel_file = "dialect_data.xlsx"
     df_hc_chars = pd.read_excel(excel_file, sheet_name="会昌话单字查询")
@@ -487,7 +493,10 @@ def get_ui_text(lang):
             "ipa_col": "国际音标",
             "new_school": "新派",
             "old_school": "老派",
-            "reading_type": "读法类型"
+            "reading_type": "读法类型",
+            "reading_filter_label": "读音派别过滤",
+            "show_old": "显示老派读音",
+            "show_new": "显示新派读音"
         }
     elif lang == "繁體中文":
         return {
@@ -525,7 +534,10 @@ def get_ui_text(lang):
             "ipa_col": "國際音標",
             "new_school": "新派",
             "old_school": "老派",
-            "reading_type": "讀法類型"
+            "reading_type": "讀法類型",
+            "reading_filter_label": "讀音派別過濾",
+            "show_old": "顯示老派讀音",
+            "show_new": "顯示新派讀音"
         }
     elif lang == "English":
         return {
@@ -563,7 +575,10 @@ def get_ui_text(lang):
             "ipa_col": "IPA",
             "new_school": "New School",
             "old_school": "Old School",
-            "reading_type": "Reading Type"
+            "reading_type": "Reading Type",
+            "reading_filter_label": "Reading Type Filter",
+            "show_old": "Show Old School",
+            "show_new": "Show New School"
         }
 
 
@@ -611,17 +626,82 @@ if st.session_state["tool_select"] == ui["search_func"]:
         st.sidebar.warning(ui["warning_select_mode"])
         selected_modes = mode_options
 
+    st.sidebar.markdown(f"**{ui['reading_filter_label']}**")
+    show_old = st.sidebar.checkbox(
+        ui["show_old"],
+        value=st.session_state.get("show_old_reading", True),
+        key="show_old_reading"
+    )
+    show_new = st.sidebar.checkbox(
+        ui["show_new"],
+        value=st.session_state.get("show_new_reading", True),
+        key="show_new_reading"
+    )
+
     is_words_mode = ui["words"] in selected_modes
     is_phrases_mode = ui["phrases"] in selected_modes
     is_sents_mode = ui["sents"] in selected_modes
 
     combined_dfs = []
     if is_words_mode:
-        combined_dfs.append(df_hc_chars)
+        df_chars_filtered = df_hc_chars.copy()
+        if not show_old or not show_new:
+            def filter_readings(df, show_old, show_new):
+                if show_old and show_new:
+                    return df
+                mask = pd.Series(True, index=df.index)
+                for idx, row in df.iterrows():
+                    reading_type = str(row.get("读法类型", ""))
+                    if "老派" in reading_type and not show_old:
+                        mask.loc[idx] = False
+                    elif "新派" in reading_type and not show_new:
+                        mask.loc[idx] = False
+                    elif reading_type and "老派" not in reading_type and "新派" not in reading_type:
+                        if not show_old and not show_new:
+                            mask.loc[idx] = False
+                return df[mask]
+            df_chars_filtered = filter_readings(df_chars_filtered, show_old, show_new)
+        combined_dfs.append(df_chars_filtered)
+    
     if is_phrases_mode:
-        combined_dfs.append(df_hc_words)
+        df_words_filtered = df_hc_words.copy()
+        if not show_old or not show_new:
+            def filter_readings(df, show_old, show_new):
+                if show_old and show_new:
+                    return df
+                mask = pd.Series(True, index=df.index)
+                for idx, row in df.iterrows():
+                    reading_type = str(row.get("读法类型", ""))
+                    if "老派" in reading_type and not show_old:
+                        mask.loc[idx] = False
+                    elif "新派" in reading_type and not show_new:
+                        mask.loc[idx] = False
+                    elif reading_type and "老派" not in reading_type and "新派" not in reading_type:
+                        if not show_old and not show_new:
+                            mask.loc[idx] = False
+                return df[mask]
+            df_words_filtered = filter_readings(df_words_filtered, show_old, show_new)
+        combined_dfs.append(df_words_filtered)
+    
     if is_sents_mode:
-        combined_dfs.append(df_hc_sents)
+        df_sents_filtered = df_hc_sents.copy()
+        if not show_old or not show_new:
+            def filter_readings(df, show_old, show_new):
+                if show_old and show_new:
+                    return df
+                mask = pd.Series(True, index=df.index)
+                for idx, row in df.iterrows():
+                    reading_type = str(row.get("读法类型", ""))
+                    if "老派" in reading_type and not show_old:
+                        mask.loc[idx] = False
+                    elif "新派" in reading_type and not show_new:
+                        mask.loc[idx] = False
+                    elif reading_type and "老派" not in reading_type and "新派" not in reading_type:
+                        if not show_old and not show_new:
+                            mask.loc[idx] = False
+                return df[mask]
+            df_sents_filtered = filter_readings(df_sents_filtered, show_old, show_new)
+        combined_dfs.append(df_sents_filtered)
 
     current_df = pd.concat(combined_dfs, ignore_index=True)
     char_col = "会昌话正字"
@@ -782,6 +862,15 @@ if st.session_state["tool_select"] == ui["search_func"]:
                     else:
                         pinyin_val = row.get(pinyin_col, '')
                         ipa_val = row.get("_ipa", convert_text(pinyin_val))
+                        reading_type = str(row.get("读法类型", ""))
+                        if "新派" in reading_type:
+                            display_type = ui["new_school"]
+                        elif "老派" in reading_type:
+                            display_type = ui["old_school"]
+                        else:
+                            display_type = reading_type if reading_type else ""
+                        if display_type and not is_char:
+                            st.markdown(f"**{display_type}**")
                         st.markdown(f"**{ui['pinyin_col']}:** `{pinyin_val}`")
                         st.markdown(f"**{ui['ipa_col']}:** `{ipa_val}`")
                 with col2:
