@@ -80,8 +80,10 @@ FINALS = [
     ("iq", "iʔ"),
     ("in", "in"),
     ("u", "u"),
+    ("y", "ɿ"),
     ("i", "i"),
     ("n", "n̩"),
+    ("m", "m̩"),
 ]
 
 INITIAL_PATTERNS = sorted([py for py, _ in INITIALS], key=len, reverse=True)
@@ -101,6 +103,8 @@ def convert_syllable(syllable):
 
     if core == "n":
         return f"n̩{tone_ipa}"
+    if core == "m":
+        return f"m̩{tone_ipa}"
 
     parsed_initial = ""
     parsed_initial_ipa = ""
@@ -113,7 +117,7 @@ def convert_syllable(syllable):
     final_pinyin = core[len(parsed_initial):]
     parsed_final_ipa = ""
     if final_pinyin == "i" and parsed_initial in ["z", "c", "s"]:
-        parsed_final_ipa = "ɿ"
+        parsed_final_ipa = "i"
     else:
         for py, ipa in FINALS:
             if final_pinyin == py:
