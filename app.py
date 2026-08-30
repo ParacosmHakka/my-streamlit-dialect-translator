@@ -1,6 +1,6 @@
 import re
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
 TONES = {
     "1": "²²⁴",
@@ -108,7 +108,7 @@ def convert_syllable(syllable):
             parsed_initial = py
             parsed_initial_ipa = ipa
             break
-    final_pinyin = core[len(parsed_initial):]
+    final_pinyin = core[len(parsed_initial) :]
     parsed_final_ipa = ""
     for py, ipa in FINALS:
         if final_pinyin == py:
@@ -155,7 +155,7 @@ def parse_pinyin_query(query):
         if core.startswith(py):
             matched_initial = py
             break
-    final_part = core[len(matched_initial):]
+    final_part = core[len(matched_initial) :]
     return matched_initial, final_part, has_tone
 
 
@@ -168,7 +168,7 @@ def get_pinyin_components(syllable):
         if core.startswith(py):
             matched_initial = py
             break
-    final_part = core[len(matched_initial):]
+    final_part = core[len(matched_initial) :]
     return matched_initial, final_part, tone
 
 
@@ -190,8 +190,8 @@ def sort_by_pinyin(df, query, selected_tones):
         return df
     char_col = "会昌话正字"
     query_lower = query.lower().strip()
-    df['_type_priority'] = df.apply(get_entry_type_priority, axis=1)
-    df['_char_len'] = df[char_col].astype(str).apply(len)
+    df["_type_priority"] = df.apply(get_entry_type_priority, axis=1)
+    df["_char_len"] = df[char_col].astype(str).apply(len)
 
     def get_sort_key(row):
         pinyin_val = str(row.get(pinyin_col, ""))
@@ -215,7 +215,7 @@ def sort_by_pinyin(df, query, selected_tones):
                 if core.startswith(py):
                     matched_initial = py
                     break
-            final_part = core[len(matched_initial):]
+            final_part = core[len(matched_initial) :]
             match_score = 9999
             if query_lower == syl:
                 match_score = 0
@@ -228,8 +228,16 @@ def sort_by_pinyin(df, query, selected_tones):
             else:
                 match_score = 9999
             syl_len = len(core)
-            initial_idx = INITIAL_ORDER.index(matched_initial) if matched_initial in INITIAL_ORDER else 9999
-            final_idx = FINAL_ORDER.index(final_part) if final_part in FINAL_ORDER else 9999
+            initial_idx = (
+                INITIAL_ORDER.index(matched_initial)
+                if matched_initial in INITIAL_ORDER
+                else 9999
+            )
+            final_idx = (
+                FINAL_ORDER.index(final_part)
+                if final_part in FINAL_ORDER
+                else 9999
+            )
             tone_idx = TONE_ORDER.index(tone) if tone in TONE_ORDER else 9999
             if match_score < best_match_score:
                 best_match_score = match_score
@@ -242,14 +250,24 @@ def sort_by_pinyin(df, query, selected_tones):
                 best_initial_idx = initial_idx
                 best_final_idx = final_idx
                 best_tone_idx = tone_idx
-        char_len = row.get('_char_len', 0)
+        char_len = row.get("_char_len", 0)
         if entry_type == "单字":
-            return (best_match_score, best_len, best_initial_idx, best_final_idx, best_tone_idx, char_len)
+            return (
+                best_match_score,
+                best_len,
+                best_initial_idx,
+                best_final_idx,
+                best_tone_idx,
+                char_len,
+            )
         else:
             return (best_match_score, best_len, char_len, 9999, 9999, 9999)
-    df['_sort_key'] = df.apply(get_sort_key, axis=1)
-    df = df.sort_values(['_type_priority', '_sort_key'], ascending=[True, True])
-    df = df.drop(['_sort_key', '_type_priority', '_char_len'], axis=1)
+
+    df["_sort_key"] = df.apply(get_sort_key, axis=1)
+    df = df.sort_values(
+        ["_type_priority", "_sort_key"], ascending=[True, True]
+    )
+    df = df.drop(["_sort_key", "_type_priority", "_char_len"], axis=1)
     return df
 
 
@@ -262,6 +280,7 @@ def filter_by_pinyin(df, query, selected_tones):
     initial, final, has_tone = parse_pinyin_query(query)
     if not query:
         if selected_tones:
+
             def has_selected_tone(pinyin_val):
                 if pd.isna(pinyin_val) or pinyin_val == "":
                     return False
@@ -271,6 +290,7 @@ def filter_by_pinyin(df, query, selected_tones):
                     if tone_match and tone_match.group(1) in selected_tones:
                         return True
                 return False
+
             mask = df[pinyin_col].astype(str).apply(has_selected_tone)
             result_df = df[mask].copy()
             if not result_df.empty:
@@ -294,12 +314,13 @@ def filter_by_pinyin(df, query, selected_tones):
                 if core.startswith(py):
                     matched_initial = py
                     break
-            final_part = core[len(matched_initial):]
+            final_part = core[len(matched_initial) :]
             initial_match = core.startswith(initial) if initial else True
             final_match = (final_part == final) if final else True
             if initial_match and final_match:
                 return True
         return False
+
     mask = df[pinyin_col].astype(str).apply(match_pinyin)
     result_df = df[mask].copy()
     if not result_df.empty:
@@ -327,6 +348,11 @@ def filter_readings_common(df, show_old, show_new):
     return df[mask]
 
 
+def is_variant_type(rt):
+    rt_str = str(rt) if pd.notna(rt) else ""
+    return any(k in rt_str for k in ["新派", "老派", "文读", "白读"])
+
+
 def group_by_character(df):
     if df.empty:
         return df
@@ -336,18 +362,37 @@ def group_by_character(df):
     grouped = []
     for char, group in df.groupby(char_col, sort=False):
         if len(group) > 1:
-            readings = []
-            for _, row in group.iterrows():
-                pinyin = str(row.get("会昌话拼音", ""))
-                ipa = convert_text(pinyin)
-                rt = str(row.get("读法类型", ""))
-                readings.append({"pinyin": pinyin, "ipa": ipa, "type": rt})
-            merged_row = group.iloc[0].to_dict()
-            merged_row["_readings"] = readings
-            merged_row["_is_grouped"] = True
-            merged_row["_type_priority"] = get_entry_type_priority(group.iloc[0])
-            merged_row["_char_len"] = len(str(char))
-            grouped.append(merged_row)
+            all_variant = all(
+                is_variant_type(r.get("读法类型", ""))
+                for _, r in group.iterrows()
+            )
+            usages = group["用法"].fillna("").astype(str).unique()
+            usages = [u for u in usages if u.strip()]
+            same_usage = len(usages) <= 1
+            if all_variant or same_usage:
+                readings = []
+                for _, row in group.iterrows():
+                    pinyin = str(row.get("会昌话拼音", ""))
+                    ipa = convert_text(pinyin)
+                    rt = str(row.get("读法类型", ""))
+                    readings.append({"pinyin": pinyin, "ipa": ipa, "type": rt})
+                merged_row = group.iloc[0].to_dict()
+                merged_row["_readings"] = readings
+                merged_row["_is_grouped"] = True
+                merged_row["_type_priority"] = get_entry_type_priority(
+                    group.iloc[0]
+                )
+                merged_row["_char_len"] = len(str(char))
+                grouped.append(merged_row)
+            else:
+                for _, row in group.iterrows():
+                    row_dict = row.to_dict()
+                    pinyin = str(row_dict.get("会昌话拼音", ""))
+                    row_dict["_ipa"] = convert_text(pinyin)
+                    row_dict["_is_grouped"] = False
+                    row_dict["_type_priority"] = get_entry_type_priority(row)
+                    row_dict["_char_len"] = len(str(char))
+                    grouped.append(row_dict)
         else:
             row_dict = group.iloc[0].to_dict()
             pinyin = str(row_dict.get("会昌话拼音", ""))
@@ -357,8 +402,8 @@ def group_by_character(df):
             row_dict["_char_len"] = len(str(char))
             grouped.append(row_dict)
     result_df = pd.DataFrame(grouped)
-    if '_sort_key' in result_df.columns:
-        result_df = result_df.drop('_sort_key', axis=1)
+    if "_sort_key" in result_df.columns:
+        result_df = result_df.drop("_sort_key", axis=1)
     return result_df
 
 
@@ -442,7 +487,7 @@ def get_ui_text(lang):
             "reading_type": "读法类型",
             "reading_filter_label": "读音派别过滤",
             "show_old": "显示老派读音",
-            "show_new": "显示新派读音"
+            "show_new": "显示新派读音",
         }
     elif lang == "繁體中文":
         return {
@@ -483,7 +528,7 @@ def get_ui_text(lang):
             "reading_type": "讀法類型",
             "reading_filter_label": "讀音派別過濾",
             "show_old": "顯示老派讀音",
-            "show_new": "顯示新派讀音"
+            "show_new": "顯示新派讀音",
         }
     elif lang == "English":
         return {
@@ -498,7 +543,9 @@ def get_ui_text(lang):
             "phrases": "Phrase Search",
             "sents": "Sentence Search",
             "search_label": "Search Here (Type Chinese character or meaning):",
-            "pinyin_search_label": "Enter Huichang Pinyin (supports initial/final/syllable):",
+            "pinyin_search_label": (
+                "Enter Huichang Pinyin (supports initial/final/syllable):"
+            ),
             "no_data": "No data found.",
             "result_title": "Result",
             "entry_count": "Entries: {}",
@@ -524,14 +571,14 @@ def get_ui_text(lang):
             "reading_type": "Reading Type",
             "reading_filter_label": "Reading Type Filter",
             "show_old": "Show Old School",
-            "show_new": "Show New School"
+            "show_new": "Show New School",
         }
 
 
 lang = st.sidebar.radio(
     label=get_ui_text(st.session_state["language"])["lang_sidebar"],
     options=["简体中文", "繁體中文", "English"],
-    key="lang_select"
+    key="lang_select",
 )
 st.session_state["language"] = lang
 ui = get_ui_text(st.session_state["language"])
@@ -542,7 +589,9 @@ current_tool = st.session_state.get("tool_select", ui["search_func"])
 if current_tool not in tool_options:
     current_tool = ui["search_func"]
     st.session_state["tool_select"] = current_tool
-selected_tool = st.sidebar.radio("", tool_options, index=tool_options.index(current_tool), key="tool_radio")
+selected_tool = st.sidebar.radio(
+    "", tool_options, index=tool_options.index(current_tool), key="tool_radio"
+)
 st.session_state["tool_select"] = selected_tool
 
 if st.session_state["tool_select"] == ui["search_func"]:
@@ -555,9 +604,7 @@ if st.session_state["tool_select"] == ui["search_func"]:
     selected_modes = []
     for mode in mode_options:
         checked = st.sidebar.checkbox(
-            mode,
-            value=(mode in current_modes),
-            key=f"mode_{mode}"
+            mode, value=(mode in current_modes), key=f"mode_{mode}"
         )
         if checked:
             selected_modes.append(mode)
@@ -566,7 +613,9 @@ if st.session_state["tool_select"] == ui["search_func"]:
         st.sidebar.warning(ui["warning_select_mode"])
         selected_modes = mode_options
 
-    current_search_type = st.session_state.get("search_type", ui["hanzi_search"])
+    current_search_type = st.session_state.get(
+        "search_type", ui["hanzi_search"]
+    )
     selected_tones = []
     if current_search_type == ui["pinyin_search"]:
         st.sidebar.markdown(f"**{ui['tone_filter_label']}**")
@@ -579,13 +628,13 @@ if st.session_state["tool_select"] == ui["search_func"]:
             "5": f"5 {TONES['5']}",
             "6": f"6 {TONES['6']}",
             "7": f"7 {TONES['7']}",
-            "8": f"8 {TONES['8']}"
+            "8": f"8 {TONES['8']}",
         }
         for t in tone_options:
             checked = st.sidebar.checkbox(
                 tone_display[t],
                 value=(t in st.session_state.get("selected_tones", [])),
-                key=f"tone_{t}"
+                key=f"tone_{t}",
             )
             if checked:
                 selected_tones.append(t)
@@ -595,12 +644,12 @@ if st.session_state["tool_select"] == ui["search_func"]:
     show_old = st.sidebar.checkbox(
         ui["show_old"],
         value=st.session_state.get("show_old_reading", True),
-        key="show_old_reading"
+        key="show_old_reading",
     )
     show_new = st.sidebar.checkbox(
         ui["show_new"],
         value=st.session_state.get("show_new_reading", True),
-        key="show_new_reading"
+        key="show_new_reading",
     )
 
     is_words_mode = ui["words"] in selected_modes
@@ -608,13 +657,19 @@ if st.session_state["tool_select"] == ui["search_func"]:
     is_sents_mode = ui["sents"] in selected_modes
     combined_dfs = []
     if is_words_mode:
-        df_chars_filtered = filter_readings_common(df_hc_chars.copy(), show_old, show_new)
+        df_chars_filtered = filter_readings_common(
+            df_hc_chars.copy(), show_old, show_new
+        )
         combined_dfs.append(df_chars_filtered)
     if is_phrases_mode:
-        df_words_filtered = filter_readings_common(df_hc_words.copy(), show_old, show_new)
+        df_words_filtered = filter_readings_common(
+            df_hc_words.copy(), show_old, show_new
+        )
         combined_dfs.append(df_words_filtered)
     if is_sents_mode:
-        df_sents_filtered = filter_readings_common(df_hc_sents.copy(), show_old, show_new)
+        df_sents_filtered = filter_readings_common(
+            df_hc_sents.copy(), show_old, show_new
+        )
         combined_dfs.append(df_sents_filtered)
     current_df = pd.concat(combined_dfs, ignore_index=True)
     char_col = "会昌话正字"
@@ -623,22 +678,27 @@ if st.session_state["tool_select"] == ui["search_func"]:
     st.caption(ui["sub"])
     col_search_input, col_search_type = st.columns([5, 1])
     with col_search_input:
-        if st.session_state.get("search_type", ui["hanzi_search"]) == ui["hanzi_search"]:
+        if (
+            st.session_state.get("search_type", ui["hanzi_search"])
+            == ui["hanzi_search"]
+        ):
             search_query = st.text_input(
                 ui["search_label"],
                 value=st.session_state.get("search_query", ""),
-                key="search_input"
+                key="search_input",
             )
         else:
             search_query = st.text_input(
                 ui["pinyin_search_label"],
                 value=st.session_state.get("search_query", ""),
-                key="search_input"
+                key="search_input",
             )
         st.session_state["search_query"] = search_query
     with col_search_type:
         st.write("")
-        current_search_type = st.session_state.get("search_type", ui["hanzi_search"])
+        current_search_type = st.session_state.get(
+            "search_type", ui["hanzi_search"]
+        )
         if current_search_type not in [ui["hanzi_search"], ui["pinyin_search"]]:
             current_search_type = ui["hanzi_search"]
         search_type = st.radio(
@@ -647,7 +707,7 @@ if st.session_state["tool_select"] == ui["search_func"]:
             index=0 if current_search_type == ui["hanzi_search"] else 1,
             key="search_type_radio",
             label_visibility="collapsed",
-            horizontal=False
+            horizontal=False,
         )
         st.session_state["search_type"] = search_type
     unique_chars = len(df_hc_chars[char_col].unique()) if is_words_mode else 0
@@ -673,21 +733,39 @@ if st.session_state["tool_select"] == ui["search_func"]:
         if search_query:
             mask = pd.Series(False, index=filtered_df.index)
             for idx in filtered_df.index:
-                val_char = str(filtered_df.loc[idx, char_col]) if pd.notna(filtered_df.loc[idx, char_col]) else ""
+                val_char = (
+                    str(filtered_df.loc[idx, char_col])
+                    if pd.notna(filtered_df.loc[idx, char_col])
+                    else ""
+                )
                 if search_query in val_char:
                     mask.loc[idx] = True
                 if "普通话" in filtered_df.columns and not mask.loc[idx]:
-                    val_mand = str(filtered_df.loc[idx, "普通话"]) if pd.notna(filtered_df.loc[idx, "普通话"]) else ""
+                    val_mand = (
+                        str(filtered_df.loc[idx, "普通话"])
+                        if pd.notna(filtered_df.loc[idx, "普通话"])
+                        else ""
+                    )
                     if search_query in val_mand:
                         mask.loc[idx] = True
             filtered_df = filtered_df[mask]
             if not filtered_df.empty:
-                filtered_df['_type_priority'] = filtered_df.apply(get_entry_type_priority, axis=1)
-                filtered_df['_char_len'] = filtered_df[char_col].astype(str).apply(len)
-                filtered_df = filtered_df.sort_values(['_type_priority', '_char_len'], ascending=[True, True])
-                filtered_df = filtered_df.drop(['_type_priority', '_char_len'], axis=1)
+                filtered_df["_type_priority"] = filtered_df.apply(
+                    get_entry_type_priority, axis=1
+                )
+                filtered_df["_char_len"] = filtered_df[char_col].astype(
+                    str
+                ).apply(len)
+                filtered_df = filtered_df.sort_values(
+                    ["_type_priority", "_char_len"], ascending=[True, True]
+                )
+                filtered_df = filtered_df.drop(
+                    ["_type_priority", "_char_len"], axis=1
+                )
     else:
-        filtered_df = filter_by_pinyin(filtered_df, search_query, st.session_state.get("selected_tones", []))
+        filtered_df = filter_by_pinyin(
+            filtered_df, search_query, st.session_state.get("selected_tones", [])
+        )
     grouped_df = group_by_character(filtered_df)
     st.subheader(ui["result_title"])
     if grouped_df.empty:
@@ -697,7 +775,9 @@ if st.session_state["tool_select"] == ui["search_func"]:
         st.caption(ui["entry_count"].format(len(grouped_df)))
         for _, row in grouped_df.iterrows():
             row = row.fillna("")
-            word_to_show = row[char_col] if (char_col in row and row[char_col]) else row.get('普通话', '')
+            word_to_show = row.get(char_col, "")
+            if not word_to_show:
+                word_to_show = row.get("普通话", "")
             display_title = f"{word_to_show}"
             with st.container():
                 col1, col2 = st.columns(2)
@@ -715,12 +795,14 @@ if st.session_state["tool_select"] == ui["search_func"]:
                                 disp_t = rt if rt else ""
                             if disp_t:
                                 st.markdown(f"**{disp_t}**")
-                            st.markdown(f"**{ui['pinyin_col']}:** `{r['pinyin']}`")
+                            st.markdown(
+                                f"**{ui['pinyin_col']}:** `{r['pinyin']}`"
+                            )
                             st.markdown(f"**{ui['ipa_col']}:** `{r['ipa']}`")
                             if idx < len(readings) - 1:
                                 st.markdown("---")
                     else:
-                        pinyin_val = row.get(pinyin_col, '')
+                        pinyin_val = row.get(pinyin_col, "")
                         ipa_val = row.get("_ipa", convert_text(pinyin_val))
                         rt = str(row.get("读法类型", ""))
                         if "新派" in rt:
@@ -734,7 +816,9 @@ if st.session_state["tool_select"] == ui["search_func"]:
                         st.markdown(f"**{ui['pinyin_col']}:** `{pinyin_val}`")
                         st.markdown(f"**{ui['ipa_col']}:** `{ipa_val}`")
                 with col2:
-                    st.markdown(f"**{ui['mandarin']}:** {row.get('普通话', '')}")
+                    mandarin_val = str(row.get("普通话", "")).strip()
+                    if mandarin_val:
+                        st.markdown(f"**{ui['mandarin']}:** {mandarin_val}")
                     if "用法" in row and row["用法"]:
                         st.markdown(f"**{ui['usage']}:** {row['用法']}")
                 st.divider()
@@ -744,7 +828,7 @@ elif st.session_state["tool_select"] == ui["ipa_func"]:
         ui["pinyin_input"],
         value=st.session_state.get("ipa_input", "hen1 ho3，hen1 jio2 n7 gei3?"),
         height=140,
-        key="ipa_textarea"
+        key="ipa_textarea",
     )
     st.session_state["ipa_input"] = ipa_input
     if st.button(ui["convert_btn"], type="primary"):
